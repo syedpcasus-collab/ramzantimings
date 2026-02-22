@@ -1,79 +1,70 @@
-# Ramadan Timings Website (React + Tailwind)
+# Ramadan Timings Website (React + Tailwind + Apps Script)
 
-A beginner-friendly Ramadan timings web app with:
-
-- Live Google Apps Script API integration
-- Country → State → District → Area filters (with **Other** option)
-- Manual add-location + timing form (POST to Google Apps Script)
+## Features
+- Dynamic Country → State → District → Area dropdowns (with **Other** option)
 - Sehri, Iftar, Last Updated display
-- Countdown timer for next Iftar
-- Auto refresh every 5 minutes
-- Dark mode + responsive UI
+- Countdown to next Iftar
+- Volunteer form: Add / Edit timing (POST)
+- Dark mode (saved in localStorage)
+- Mobile-first responsive Tailwind UI
+- Session cache (2-minute stale-while-revalidate)
 
-## Run locally
-
+## Setup
 ```bash
+cp .env.example .env
 npm install
 npm run dev
 ```
 
-## API endpoints
-
-- GET timings:
-  - `https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec`
-- POST new timing:
-  - same URL (uses `doPost` in Apps Script)
-
-If GET API fails, app falls back to `public/data/timings.json`.
-
-## Google Apps Script (doPost)
-
-Use this in your Apps Script project (replace `SHEET_NAME` if needed):
-
-```javascript
-const SHEET_NAME = 'Sheet1';
-
-function doPost(e) {
-  try {
-    const payload = JSON.parse(e.postData.contents || '{}');
-    const required = ['country', 'state', 'district', 'area', 'sehri', 'iftar'];
-
-    for (var i = 0; i < required.length; i++) {
-      if (!payload[required[i]]) {
-        return ContentService
-          .createTextOutput(JSON.stringify({ ok: false, error: required[i] + ' is required' }))
-          .setMimeType(ContentService.MimeType.JSON);
-      }
-    }
-
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-    const lastUpdated = new Date();
-
-    sheet.appendRow([
-      payload.country,
-      payload.state,
-      payload.district,
-      payload.area,
-      payload.sehri,
-      payload.iftar,
-      lastUpdated
-    ]);
-
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: true, message: 'Row added successfully' }))
-      .setMimeType(ContentService.MimeType.JSON);
-  } catch (error) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ ok: false, error: error.message }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
+Set API URL in `.env`:
+```env
+VITE_API_URL=https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec
 ```
 
-## Beginner flow
+## Apps Script backend notes
+Backend implementation is in `Code.gs`.
 
-1. Select Country/State/District/Area.
-2. If your location is missing, pick **Other** and type the new value.
-3. Fill Sehri + Iftar.
-4. Click **Submit New Timing**.
-5. See loading, success, or error message.
+Set editor key in Apps Script:
+```javascript
+PropertiesService.getScriptProperties().setProperty('EDITOR_KEY','your-secret')
+```
+
+Deploy steps:
+1. Deploy → New deployment
+2. Select **Web app**
+3. Execute as: **Me**
+4. Who has access: **Anyone**
+5. Create new version after each edit
+
+Webapp URL:
+`https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec`
+
+## API curl examples
+GET:
+```bash
+curl 'https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec?date=2026-03-05&country=India&state=Tamil%20Nadu&district=Trichy&area=Kattur'
+```
+
+POST add:
+```bash
+curl -X POST 'https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec' \
+ -H "Content-Type: application/json" \
+ -d '{"action":"add","Country":"India","State":"Tamil Nadu","District":"Trichy","Area":"Kattur","Date":"2026-03-05","Sehri":"05:10","Iftar":"18:20"}'
+```
+
+POST update with editor key:
+```bash
+curl -X POST 'https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec' \
+ -H "Content-Type: application/json" \
+ -d '{"action":"update","editor_key":"MYSECRET","Country":"India","State":"Tamil Nadu","District":"Trichy","Area":"Kattur","Date":"2026-03-05","Sehri":"05:09","Iftar":"18:21"}'
+```
+
+## Security note
+If you want auto-approve, you can pass `editor_key` from client env, but this is **not recommended**. Better approach: use a small secured admin page and never expose secret in public bundle.
+
+## Future improvements
+- Rate limiting
+- Admin approval UI for pending queue
+- IP whitelist for sensitive updates
+- CAPTCHA for public submission
+- Logs retention policy
