@@ -1,0 +1,42 @@
+{
+  "India": {
+    "Tamil Nadu": {
+      "Chennai": {
+        "Anna Nagar": {
+          "sehri": "04:47",
+          "iftar": "18:22",
+          "lastUpdated": "2026-02-22 18:00 IST"
+        },
+        "T. Nagar": {
+          "sehri": "04:48",
+          "iftar": "18:23",
+          "lastUpdated": "2026-02-22 18:00 IST"
+        }
+      },
+      "Trichy": {
+        "Srirangam": {
+          "sehri": "04:50",
+          "iftar": "18:24",
+          "lastUpdated": "2026-02-22 18:00 IST"
+        },
+        "Cantonment": {
+          "sehri": "04:51",
+          "iftar": "18:25",
+          "lastUpdated": "2026-02-22 18:00 IST"
+        }
+      },
+      "Madurai": {
+        "Anna Nagar": {
+          "sehri": "04:52",
+          "iftar": "18:26",
+          "lastUpdated": "2026-02-22 18:00 IST"
+        },
+        "KK Nagar": {
+          "sehri": "04:53",
+          "iftar": "18:27",
+          "lastUpdated": "2026-02-22 18:00 IST"
+        }
+      }
+    }
+  }
+}
