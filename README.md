@@ -68,3 +68,11 @@ If you want auto-approve, you can pass `editor_key` from client env, but this is
 - IP whitelist for sensitive updates
 - CAPTCHA for public submission
 - Logs retention policy
+
+## Manual checklist (dropdown + Other)
+- Country/State/District/Area show placeholder first.
+- Each dropdown ends with **Other (type manually)**.
+- Selecting Other reveals inline input **Enter country/state/district/area**.
+- If API returns no locations, alert appears: **No saved locations found — please type your location below**.
+- Volunteer form submits typed values exactly as entered.
+- Existing saved locations can still be selected normally.

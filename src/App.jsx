@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import Countdown from './components/Countdown'
 import LocationDropdowns, { OTHER_VALUE } from './components/LocationDropdowns'
 import VolunteerForm from './components/VolunteerForm'
-import { fetchTimings, postTiming } from './services/ApiService'
+import { fetchTimings, fetchUniqueValues, postTiming } from './services/ApiService'
 
 function todayDate() {
   const d = new Date()
@@ -11,19 +11,19 @@ function todayDate() {
 
 function normalizeRow(row) {
   return {
-    Country: row.Country ?? row.country ?? '',
-    State: row.State ?? row.state ?? '',
-    District: row.District ?? row.district ?? '',
-    Area: row.Area ?? row.area ?? '',
-    Date: row.Date ?? row.date ?? todayDate(),
-    Sehri: row.Sehri ?? row.sehri ?? '--:--',
-    Iftar: row.Iftar ?? row.iftar ?? '--:--',
-    LastUpdated: row.LastUpdated ?? row.lastUpdated ?? new Date().toISOString(),
+    Country: String(row.Country ?? row.country ?? '').trim(),
+    State: String(row.State ?? row.state ?? '').trim(),
+    District: String(row.District ?? row.district ?? '').trim(),
+    Area: String(row.Area ?? row.area ?? '').trim(),
+    Date: String(row.Date ?? row.date ?? todayDate()).trim(),
+    Sehri: String(row.Sehri ?? row.sehri ?? '--:--').trim(),
+    Iftar: String(row.Iftar ?? row.iftar ?? '--:--').trim(),
+    LastUpdated: String(row.LastUpdated ?? row.lastUpdated ?? new Date().toISOString()).trim(),
   }
 }
 
-function getResolved(value, typed) {
-  return value === OTHER_VALUE ? typed.trim() : value
+function resolve(value, otherValue) {
+  return value === OTHER_VALUE ? otherValue : value
 }
 
 export default function App() {
@@ -47,11 +47,11 @@ export default function App() {
     setLoading(true)
     setError('')
     try {
-      const data = await fetchTimings({ date: selectedDate })
-      setRows(data.map(normalizeRow))
+      const raw = await fetchTimings({ date: selectedDate })
+      setRows(raw.map(normalizeRow))
     } catch (err) {
-      setError(err.message || 'Failed to load timings')
       setRows([])
+      setError(err.message || 'Failed to load timings')
     } finally {
       setLoading(false)
     }
@@ -63,52 +63,84 @@ export default function App() {
     return () => clearInterval(id)
   }, [loadRows])
 
-  const countries = useMemo(
-    () => [...new Set(rows.map((r) => r.Country).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [rows],
-  )
+  const countryValue = resolve(location.country, otherInput.country).trim()
+  const stateValue = resolve(location.state, otherInput.state).trim()
+  const districtValue = resolve(location.district, otherInput.district).trim()
+  const areaValue = resolve(location.area, otherInput.area).trim()
 
-  const currentCountry = getResolved(location.country, otherInput.country)
+  // Hierarchical, unique, alphabetical options.
+  const countries = useMemo(() => fetchUniqueValues(rows, 'Country'), [rows])
   const states = useMemo(
-    () => [...new Set(rows.filter((r) => r.Country === currentCountry).map((r) => r.State).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [rows, currentCountry],
+    () => fetchUniqueValues(rows, 'State', (r) => r.Country === countryValue),
+    [rows, countryValue],
   )
-  const currentState = getResolved(location.state, otherInput.state)
-
   const districts = useMemo(
-    () => [...new Set(rows.filter((r) => r.Country === currentCountry && r.State === currentState).map((r) => r.District).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [rows, currentCountry, currentState],
+    () => fetchUniqueValues(rows, 'District', (r) => r.Country === countryValue && r.State === stateValue),
+    [rows, countryValue, stateValue],
   )
-  const currentDistrict = getResolved(location.district, otherInput.district)
-
   const areas = useMemo(
-    () => [...new Set(rows.filter((r) => r.Country === currentCountry && r.State === currentState && r.District === currentDistrict).map((r) => r.Area).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
-    [rows, currentCountry, currentState, currentDistrict],
+    () =>
+      fetchUniqueValues(
+        rows,
+        'Area',
+        (r) => r.Country === countryValue && r.State === stateValue && r.District === districtValue,
+      ),
+    [rows, countryValue, stateValue, districtValue],
   )
 
+  // Keep user on placeholders by default; never force-select Other.
   useEffect(() => {
-    if (!countries.length) return
-    const country = countries.includes(location.country) ? location.country : countries.find((c) => c === 'India') || countries[0]
-    const st = [...new Set(rows.filter((r) => r.Country === country).map((r) => r.State).filter(Boolean))]
-    const state = st.includes(location.state) ? location.state : st.find((s) => s === 'Tamil Nadu') || st[0] || ''
-    const dt = [...new Set(rows.filter((r) => r.Country === country && r.State === state).map((r) => r.District).filter(Boolean))]
-    const district = dt.includes(location.district) ? location.district : dt[0] || ''
-    const ar = [...new Set(rows.filter((r) => r.Country === country && r.State === state && r.District === district).map((r) => r.Area).filter(Boolean))]
-    const area = ar.includes(location.area) ? location.area : ar[0] || ''
-    setLocation((prev) =>
-      prev.country === country && prev.state === state && prev.district === district && prev.area === area
-        ? prev
-        : { country, state, district, area },
-    )
-  }, [countries, rows, location])
+    if (location.country && location.country !== OTHER_VALUE && !countries.includes(location.country)) {
+      setLocation({ country: '', state: '', district: '', area: '' })
+      return
+    }
+
+    if (location.state && location.state !== OTHER_VALUE && !states.includes(location.state)) {
+      setLocation((prev) => ({ ...prev, state: '', district: '', area: '' }))
+      return
+    }
+
+    if (location.district && location.district !== OTHER_VALUE && !districts.includes(location.district)) {
+      setLocation((prev) => ({ ...prev, district: '', area: '' }))
+      return
+    }
+
+    if (location.area && location.area !== OTHER_VALUE && !areas.includes(location.area)) {
+      setLocation((prev) => ({ ...prev, area: '' }))
+    }
+  }, [countries, states, districts, areas, location])
 
   const activeRow = useMemo(() => {
-    const country = getResolved(location.country, otherInput.country)
-    const state = getResolved(location.state, otherInput.state)
-    const district = getResolved(location.district, otherInput.district)
-    const area = getResolved(location.area, otherInput.area)
-    return rows.find((r) => r.Date === selectedDate && r.Country === country && r.State === state && r.District === district && r.Area === area) || null
-  }, [rows, location, otherInput, selectedDate])
+    return (
+      rows.find(
+        (row) =>
+          row.Date === selectedDate &&
+          row.Country === countryValue &&
+          row.State === stateValue &&
+          row.District === districtValue &&
+          row.Area === areaValue,
+      ) || null
+    )
+  }, [rows, selectedDate, countryValue, stateValue, districtValue, areaValue])
+
+  const noSavedLocations = !loading && countries.length === 0
+
+  function onSelect(field, value) {
+    setToast('')
+    if (field === 'country') {
+      setLocation({ country: value, state: '', district: '', area: '' })
+      return
+    }
+    if (field === 'state') {
+      setLocation((prev) => ({ ...prev, state: value, district: '', area: '' }))
+      return
+    }
+    if (field === 'district') {
+      setLocation((prev) => ({ ...prev, district: value, area: '' }))
+      return
+    }
+    setLocation((prev) => ({ ...prev, area: value }))
+  }
 
   async function submitVolunteer(payload, editorKey) {
     setSubmitLoading(true)
@@ -116,76 +148,13 @@ export default function App() {
     setToast('')
     try {
       const result = await postTiming(payload, editorKey)
-      if (result.success) {
-        setToast(`Success: ${result.action || 'saved'}`)
-      } else {
-        setToast(result.message || 'Saved as pending edit')
-      }
+      setToast(result.success ? `Success: ${result.action || 'saved'}` : result.message || 'Saved as pending')
       await loadRows()
     } catch (err) {
       setError(err.message || 'Submit failed')
     } finally {
       setSubmitLoading(false)
     }
-  }
-
-  function onSelect(field, value) {
-    if (field === 'country') {
-      if (value === OTHER_VALUE) {
-        setLocation({ country: OTHER_VALUE, state: OTHER_VALUE, district: OTHER_VALUE, area: OTHER_VALUE })
-        return
-      }
-      const state = states[0] || ''
-      const district = districts[0] || ''
-      const area = areas[0] || ''
-      setLocation({ country: value, state, district, area })
-      return
-    }
-    if (field === 'state' && value === OTHER_VALUE) {
-      setLocation((p) => ({ ...p, state: OTHER_VALUE, district: OTHER_VALUE, area: OTHER_VALUE }))
-      return
-    }
-    if (field === 'district' && value === OTHER_VALUE) {
-      setLocation((p) => ({ ...p, district: OTHER_VALUE, area: OTHER_VALUE }))
-      return
-    }
-    setLocation((p) => ({ ...p, [field]: value }))
-  }
-
-  const optionsForVolunteer = {
-    countries,
-    states: (sel, oth) => {
-      const country = getResolved(sel.country, oth.country)
-      return [...new Set(rows.filter((r) => r.Country === country).map((r) => r.State).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-    },
-    districts: (sel, oth) => {
-      const country = getResolved(sel.country, oth.country)
-      const state = getResolved(sel.state, oth.state)
-      return [...new Set(rows.filter((r) => r.Country === country && r.State === state).map((r) => r.District).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-    },
-    areas: (sel, oth) => {
-      const country = getResolved(sel.country, oth.country)
-      const state = getResolved(sel.state, oth.state)
-      const district = getResolved(sel.district, oth.district)
-      return [...new Set(rows.filter((r) => r.Country === country && r.State === state && r.District === district).map((r) => r.Area).filter(Boolean))].sort((a, b) => a.localeCompare(b))
-    },
-    byCountry: countries.reduce((acc, c) => {
-      acc[c] = [...new Set(rows.filter((r) => r.Country === c).map((r) => r.State).filter(Boolean))]
-      return acc
-    }, {}),
-    byState: rows.reduce((acc, r) => {
-      acc[r.Country] = acc[r.Country] || {}
-      acc[r.Country][r.State] = acc[r.Country][r.State] || []
-      if (!acc[r.Country][r.State].includes(r.District)) acc[r.Country][r.State].push(r.District)
-      return acc
-    }, {}),
-    byDistrict: rows.reduce((acc, r) => {
-      acc[r.Country] = acc[r.Country] || {}
-      acc[r.Country][r.State] = acc[r.Country][r.State] || {}
-      acc[r.Country][r.State][r.District] = acc[r.Country][r.State][r.District] || []
-      if (!acc[r.Country][r.State][r.District].includes(r.Area)) acc[r.Country][r.State][r.District].push(r.Area)
-      return acc
-    }, {}),
   }
 
   return (
@@ -195,9 +164,9 @@ export default function App() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="text-2xl font-bold text-islamic-green dark:text-emerald-300">Ramadan Timings</h1>
-              <p className="text-sm text-slate-600 dark:text-slate-300">Simple UI optimized for mobile, tablet, and desktop.</p>
+              <p className="text-sm text-slate-600 dark:text-slate-300">Choose location from saved names, or type manually if missing.</p>
             </div>
-            <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="rounded-lg border px-3 py-2 text-sm">
+            <button onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')} className="min-h-11 rounded-lg border px-3 py-2 text-sm">
               {theme === 'light' ? '🌙 Dark Mode' : '☀️ Light Mode'}
             </button>
           </div>
@@ -205,9 +174,15 @@ export default function App() {
 
         <main className="grid gap-4 lg:grid-cols-3">
           <section className="lg:col-span-2 rounded-2xl border border-emerald-200 bg-white/90 p-5 shadow-sm dark:border-slate-700 dark:bg-slate-900/90">
-            <label className="mb-3 block text-sm font-medium">
+            <label className="mb-3 block text-sm font-medium" htmlFor="date-filter">
               Date
-              <input type="date" className="mt-1 w-full rounded-lg border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-950" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} />
+              <input
+                id="date-filter"
+                type="date"
+                className="mt-1 min-h-11 w-full rounded-lg border border-slate-300 p-2 dark:border-slate-700 dark:bg-slate-950"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
             </label>
 
             <LocationDropdowns
@@ -215,12 +190,13 @@ export default function App() {
               selected={location}
               otherInput={otherInput}
               onSelect={onSelect}
-              onOtherChange={(field, value) => setOtherInput((p) => ({ ...p, [field]: value }))}
+              onOtherChange={(field, value) => setOtherInput((prev) => ({ ...prev, [field]: value }))}
+              showEmptyHint={noSavedLocations}
             />
 
-            {loading ? <p className="mt-5">Loading timings...</p> : null}
-            {error ? <p className="mt-5 rounded-md bg-rose-100 px-3 py-2 text-sm text-rose-700">{error}</p> : null}
-            {toast ? <p className="mt-5 rounded-md bg-emerald-100 px-3 py-2 text-sm text-emerald-800">{toast}</p> : null}
+            {loading && <p className="mt-5">Loading timings...</p>}
+            {error && <p className="mt-5 rounded-md bg-rose-100 px-3 py-2 text-sm text-rose-700">{error}</p>}
+            {toast && <p className="mt-5 rounded-md bg-emerald-100 px-3 py-2 text-sm text-emerald-800">{toast}</p>}
 
             {activeRow ? (
               <>
@@ -240,15 +216,20 @@ export default function App() {
                 <p className="mt-4 text-sm text-slate-600 dark:text-slate-300">Last updated timestamp: {activeRow.LastUpdated}</p>
               </>
             ) : (
-              !loading && <p className="mt-5 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800">No timing found for selected filters.</p>
+              !loading &&
+              !error &&
+              (countryValue || stateValue || districtValue || areaValue) && (
+                <p className="mt-5 rounded-md bg-amber-100 px-3 py-2 text-sm text-amber-800">No timing found for selected filters.</p>
+              )
             )}
           </section>
 
           <VolunteerForm
-            options={optionsForVolunteer}
+            options={{ countries, states, districts, areas }}
             defaults={location}
             onSubmit={submitVolunteer}
             submitting={submitLoading}
+            emptyLocations={noSavedLocations}
           />
         </main>
       </div>

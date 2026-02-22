@@ -30,7 +30,7 @@ function writeCache(data) {
   try {
     sessionStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }))
   } catch {
-    // ignore storage errors on constrained devices/browsers
+    // ignore storage errors on constrained browsers/devices
   }
 }
 
@@ -42,6 +42,7 @@ function normalizeList(payload) {
   return []
 }
 
+// Returns raw data array from API.
 export async function fetchTimings(params = {}, { revalidate = true } = {}) {
   const query = toQuery(params)
   const url = query ? `${BASE_URL}?${query}` : BASE_URL
@@ -65,6 +66,13 @@ export async function fetchTimings(params = {}, { revalidate = true } = {}) {
   const list = normalizeList(json)
   writeCache(list)
   return list
+}
+
+// Helper for unique alphabetical values by key with optional filtering.
+export function fetchUniqueValues(rows, key, filterFn = () => true) {
+  return [...new Set(rows.filter(filterFn).map((row) => String(row[key] ?? '').trim()).filter(Boolean))].sort((a, b) =>
+    a.localeCompare(b),
+  )
 }
 
 export async function postTiming(payload, editorKey = '') {
