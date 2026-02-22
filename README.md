@@ -2,12 +2,13 @@
 
 A beginner-friendly Ramadan timings web app with:
 
+- Google Apps Script API integration
 - Country → State → District → Area dropdown filters
 - Sehri and Iftar timings
 - Live countdown to next Iftar
-- Dark mode toggle
 - Last updated timestamp display
-- Easy admin JSON editor (no login/signup)
+- Auto refresh every 5 minutes
+- Dark mode toggle
 - Responsive layout for mobile/tablet/desktop
 
 ## 1) Run locally
@@ -17,56 +18,28 @@ npm install
 npm run dev
 ```
 
-Open the local URL shown by Vite.
+## 2) API source
 
-## 2) Data source (simple backend)
+Primary API:
 
-This app reads timing data from `public/data/timings.json`.
-
-You can update timings in two easy ways:
-
-1. **Developer way**: edit `public/data/timings.json` and redeploy.
-2. **Non-technical way**: use the built-in **Easy Admin Update** panel and click **Save Timings**.
-   - Data is saved into browser localStorage.
-   - No login/signup required.
-
-## 3) JSON structure
-
-```json
-{
-  "India": {
-    "Tamil Nadu": {
-      "Chennai": {
-        "Anna Nagar": {
-          "sehri": "04:47",
-          "iftar": "18:22",
-          "lastUpdated": "2026-02-22 18:00 IST"
-        }
-      }
-    }
-  }
-}
+```text
+https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec
 ```
 
-## 4) Free deployment
+Fallback API/data: `public/data/timings.json`
 
-### Option A: Netlify
-1. Push code to GitHub.
-2. Go to Netlify → **Add new site** → **Import from Git**.
-3. Build command: `npm run build`
-4. Publish directory: `dist`
-5. Deploy.
+If the Google API is temporarily unavailable (CORS/network/down), the app gracefully falls back to local JSON so users still see timings.
 
-### Option B: Vercel
-1. Push code to GitHub.
-2. Import project in Vercel.
-3. Framework preset: **Vite**.
-4. Deploy.
+## 3) Beginner flow
 
-## 5) Beginner notes
+1. Open app.
+2. Select Country → State → District → Area.
+3. Timings update instantly.
+4. Check countdown and last updated timestamp.
+5. App refreshes data every 5 minutes automatically.
+6. Click **Refresh Now** for manual refresh.
 
-- Default location is **India → Tamil Nadu → Chennai → Anna Nagar**.
-- When you change dropdowns, timing updates instantly.
-- Countdown automatically updates every second.
-- Last updated timestamp shown below timing cards.
+## 4) Deployment (free)
 
+- Netlify (Vite build command: `npm run build`, publish dir: `dist`)
+- Vercel (Framework preset: Vite)
