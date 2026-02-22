@@ -2,44 +2,78 @@
 
 A beginner-friendly Ramadan timings web app with:
 
-- Google Apps Script API integration
-- Country → State → District → Area dropdown filters
-- Sehri and Iftar timings
-- Live countdown to next Iftar
-- Last updated timestamp display
+- Live Google Apps Script API integration
+- Country → State → District → Area filters (with **Other** option)
+- Manual add-location + timing form (POST to Google Apps Script)
+- Sehri, Iftar, Last Updated display
+- Countdown timer for next Iftar
 - Auto refresh every 5 minutes
-- Dark mode toggle
-- Responsive layout for mobile/tablet/desktop
+- Dark mode + responsive UI
 
-## 1) Run locally
+## Run locally
 
 ```bash
 npm install
 npm run dev
 ```
 
-## 2) API source
+## API endpoints
 
-Primary API:
+- GET timings:
+  - `https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec`
+- POST new timing:
+  - same URL (uses `doPost` in Apps Script)
 
-```text
-https://script.google.com/macros/s/AKfycbyPkBWIASupSmjB8iG7uw3NjBIU5EmBil97nmAzi7agAAZtstYk3Iq6Lr7zqt3qwP3B/exec
+If GET API fails, app falls back to `public/data/timings.json`.
+
+## Google Apps Script (doPost)
+
+Use this in your Apps Script project (replace `SHEET_NAME` if needed):
+
+```javascript
+const SHEET_NAME = 'Sheet1';
+
+function doPost(e) {
+  try {
+    const payload = JSON.parse(e.postData.contents || '{}');
+    const required = ['country', 'state', 'district', 'area', 'sehri', 'iftar'];
+
+    for (var i = 0; i < required.length; i++) {
+      if (!payload[required[i]]) {
+        return ContentService
+          .createTextOutput(JSON.stringify({ ok: false, error: required[i] + ' is required' }))
+          .setMimeType(ContentService.MimeType.JSON);
+      }
+    }
+
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const lastUpdated = new Date();
+
+    sheet.appendRow([
+      payload.country,
+      payload.state,
+      payload.district,
+      payload.area,
+      payload.sehri,
+      payload.iftar,
+      lastUpdated
+    ]);
+
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: true, message: 'Row added successfully' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ ok: false, error: error.message }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
 ```
 
-Fallback API/data: `public/data/timings.json`
+## Beginner flow
 
-If the Google API is temporarily unavailable (CORS/network/down), the app gracefully falls back to local JSON so users still see timings.
-
-## 3) Beginner flow
-
-1. Open app.
-2. Select Country → State → District → Area.
-3. Timings update instantly.
-4. Check countdown and last updated timestamp.
-5. App refreshes data every 5 minutes automatically.
-6. Click **Refresh Now** for manual refresh.
-
-## 4) Deployment (free)
-
-- Netlify (Vite build command: `npm run build`, publish dir: `dist`)
-- Vercel (Framework preset: Vite)
+1. Select Country/State/District/Area.
+2. If your location is missing, pick **Other** and type the new value.
+3. Fill Sehri + Iftar.
+4. Click **Submit New Timing**.
+5. See loading, success, or error message.
